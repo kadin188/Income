@@ -10,44 +10,45 @@
     font-family: 'Roboto', sans-serif;
     background: linear-gradient(135deg, #74ebd5, #ACB6E5);
     display: flex;
-    flex-direction: column;
+    justify-content: center;
     align-items: center;
-    padding: 20px;
+    height: 100vh;
     margin: 0;
     transition: background 0.5s;
   }
   body.dark { background: linear-gradient(135deg, #1f1f1f, #333); }
 
   .calculator {
-    background: rgba(255,255,255,0.9);
+    background: rgba(255,255,255,0.95);
     padding: 30px;
     border-radius: 20px;
     box-shadow: 0 15px 35px rgba(0,0,0,0.2);
-    width: 400px;
+    width: 420px;
     text-align: center;
     transition: all 0.3s ease;
-    margin-bottom: 30px;
   }
   body.dark .calculator { background: rgba(50,50,50,0.9); color: #eee; }
 
   h1 { margin-bottom: 20px; color: #333; }
+  body.dark h1 { color: #fff; }
 
   .input-group { margin-bottom: 15px; text-align: left; }
 
   label { display: block; margin-bottom: 5px; font-weight: bold; color: #555; }
   body.dark label { color: #ccc; }
 
-  input {
+  input, select {
     width: 100%; padding: 12px; border-radius: 12px; border: none; font-size: 16px;
     background: #f0f0f0; box-shadow: inset 5px 5px 10px #d1d1d1, inset -5px -5px 10px #fff;
     transition: all 0.2s ease;
   }
-  body.dark input {
+  body.dark input, body.dark select {
     background: #444;
     box-shadow: inset 5px 5px 10px #222, inset -5px -5px 10px #666;
     color: #eee;
   }
-  input:focus {
+
+  input:focus, select:focus {
     outline: none;
     box-shadow: inset 5px 5px 12px #d1d1d1, inset -5px -5px 12px #ffffff, 0 0 5px #74ebd5;
   }
@@ -77,7 +78,23 @@
   }
   .toggle-dark:hover { text-decoration: underline; }
 
-  canvas { max-width: 100%; margin-top: 20px; }
+  .deductions {
+    margin-top: 20px;
+    text-align: left;
+    border-top: 1px solid #ccc;
+    padding-top: 15px;
+    overflow: hidden;
+    max-height: 0;
+    opacity: 0;
+    transition: max-height 0.5s ease, opacity 0.5s ease;
+  }
+  .deductions.active {
+    max-height: 500px;
+    opacity: 1;
+  }
+
+  .deductions label { font-weight: normal; }
+  .slider-value { font-weight: bold; float: right; }
 </style>
 </head>
 <body>
@@ -106,20 +123,75 @@
   </div>
 
   <button onclick="calculateIncome()">Calculate</button>
+  <button onclick="toggleDeductions()">🧮 Smart Deductions Mode</button>
   <button class="toggle-dark" onclick="toggleDarkMode()">Toggle Dark Mode</button>
+
+  <div class="deductions" id="deductions">
+    <h3>Tax & Deductions</h3>
+
+    <div class="input-group">
+      <label>Province</label>
+      <select id="province" onchange="setProvinceDefaults()">
+        <option value="SK">Saskatchewan</option>
+        <option value="AB">Alberta</option>
+        <option value="MB">Manitoba</option>
+      </select>
+    </div>
+
+    <div class="input-group">
+      <label>Federal/Provincial Tax: <span class="slider-value" id="taxValue">25%</span></label>
+      <input type="range" id="tax" min="0" max="50" value="25" oninput="updateSliderValue('tax')">
+    </div>
+
+    <div class="input-group">
+      <label>CPP: <span class="slider-value" id="cppValue">5%</span></label>
+      <input type="range" id="cpp" min="0" max="10" value="5" oninput="updateSliderValue('cpp')">
+    </div>
+
+    <div class="input-group">
+      <label>EI: <span class="slider-value" id="eiValue">2%</span></label>
+      <input type="range" id="ei" min="0" max="5" value="2" oninput="updateSliderValue('ei')">
+    </div>
+
+    <div class="input-group">
+      <label>Benefits: <span class="slider-value" id="benefitsValue">3%</span></label>
+      <input type="range" id="benefits" min="0" max="10" value="3" oninput="updateSliderValue('benefits')">
+    </div>
+  </div>
 
   <div class="result" id="result">
     Enter your info above and click Calculate
   </div>
 </div>
 
-<canvas id="incomeChart" height="200"></canvas>
-
 <div class="footer">Created by Kadin</div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-function toggleDarkMode() { document.body.classList.toggle('dark'); }
+function toggleDarkMode() {
+  document.body.classList.toggle('dark');
+}
+
+function toggleDeductions() {
+  document.getElementById('deductions').classList.toggle('active');
+}
+
+function updateSliderValue(id) {
+  document.getElementById(id + 'Value').innerText = document.getElementById(id).value + '%';
+}
+
+function setProvinceDefaults() {
+  const province = document.getElementById('province').value;
+  const defaults = {
+    SK: { tax: 25, cpp: 5, ei: 2, benefits: 3 },
+    AB: { tax: 23, cpp: 5, ei: 2, benefits: 2 },
+    MB: { tax: 27, cpp: 5, ei: 2, benefits: 3 }
+  };
+  const d = defaults[province];
+  for (const key in d) {
+    document.getElementById(key).value = d[key];
+    updateSliderValue(key);
+  }
+}
 
 function animateValue(element, start, end, duration) {
   let startTimestamp = null;
@@ -132,15 +204,18 @@ function animateValue(element, start, end, duration) {
   window.requestAnimationFrame(step);
 }
 
-let chart = null;
-
 function calculateIncome() {
   const hourlyRate = parseFloat(document.getElementById('hourlyRate').value);
   const hoursPerDay = parseFloat(document.getElementById('hoursPerDay').value);
   const weeksOn = parseFloat(document.getElementById('weeksOn').value);
   const weeksOff = parseFloat(document.getElementById('weeksOff').value);
 
-  if (isNaN(hourlyRate) || isNaN(hoursPerDay) || isNaN(weeksOn) || isNaN(weeksOff)) {
+  const tax = parseFloat(document.getElementById('tax').value) / 100;
+  const cpp = parseFloat(document.getElementById('cpp').value) / 100;
+  const ei = parseFloat(document.getElementById('ei').value) / 100;
+  const benefits = parseFloat(document.getElementById('benefits').value) / 100;
+
+  if ([hourlyRate, hoursPerDay, weeksOn, weeksOff].some(isNaN)) {
     document.getElementById('result').innerText = "Please enter valid numbers!";
     return;
   }
@@ -152,64 +227,43 @@ function calculateIncome() {
 
   const dailyIncome = hoursPerDay * hourlyRate;
   const incomePerCycle = dailyIncome * daysOn;
-  const annualIncome = incomePerCycle * cyclesPerYear;
-  const monthlyIncome = annualIncome / 12;
-  const weeklyIncome = dailyIncome * 7;
+  const annualGross = incomePerCycle * cyclesPerYear;
+  const monthlyGross = annualGross / 12;
+  const weeklyGross = dailyIncome * 7;
+
+  const totalDeductions = tax + cpp + ei + benefits;
+  const annualNet = annualGross * (1 - totalDeductions);
+  const monthlyNet = annualNet / 12;
+  const weeklyNet = annualNet / 52;
+  const dailyNet = weeklyNet / 7;
 
   document.getElementById('result').innerHTML = `
-    <p>Daily Income: <span id="daily">$0.00</span></p>
-    <p>Weekly Income: <span id="weekly">$0.00</span></p>
-    <p>Monthly Income: <span id="monthly">$0.00</span></p>
-    <p>Annual Income: <span id="annual">$0.00</span></p>
-    <p>Cycle Length: ${daysOn} days on / ${daysOff} days off</p>
+    <p><strong>Gross Income</strong></p>
+    <p>Daily: <span id="dailyGross">$0.00</span></p>
+    <p>Weekly: <span id="weeklyGross">$0.00</span></p>
+    <p>Monthly: <span id="monthlyGross">$0.00</span></p>
+    <p>Annual: <span id="annualGross">$0.00</span></p>
+    <hr>
+    <p><strong>Net (After Deductions)</strong></p>
+    <p>Daily: <span id="dailyNet">$0.00</span></p>
+    <p>Weekly: <span id="weeklyNet">$0.00</span></p>
+    <p>Monthly: <span id="monthlyNet">$0.00</span></p>
+    <p>Annual: <span id="annualNet">$0.00</span></p>
+    <p>Cycle: ${daysOn} days on / ${daysOff} days off</p>
   `;
 
-  animateValue(document.getElementById('daily'), 0, dailyIncome, 1000);
-  animateValue(document.getElementById('weekly'), 0, weeklyIncome, 1000);
-  animateValue(document.getElementById('monthly'), 0, monthlyIncome, 1000);
-  animateValue(document.getElementById('annual'), 0, annualIncome, 1000);
+  animateValue(document.getElementById('dailyGross'), 0, dailyIncome, 1000);
+  animateValue(document.getElementById('weeklyGross'), 0, weeklyGross, 1000);
+  animateValue(document.getElementById('monthlyGross'), 0, monthlyGross, 1000);
+  animateValue(document.getElementById('annualGross'), 0, annualGross, 1000);
 
-  // Prepare data for chart
-  const months = Array.from({length: 12}, (_, i) => `Month ${i+1}`);
-  const monthlyData = [];
-  let totalDays = 0;
-
-  for (let i = 0; i < 12; i++) {
-    let income = 0;
-    for (let d = 0; d < 30; d++) {
-      const dayInCycle = totalDays % cycleLength;
-      if (dayInCycle < daysOn) income += dailyIncome;
-      totalDays++;
-    }
-    monthlyData.push(income.toFixed(2));
-  }
-
-  if(chart) chart.destroy();
-
-  const ctx = document.getElementById('incomeChart').getContext('2d');
-  chart = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: months,
-      datasets: [{
-        label: 'Income per Month ($)',
-        data: monthlyData,
-        backgroundColor: 'rgba(116,235,213,0.7)',
-        borderColor: 'rgba(116,235,213,1)',
-        borderWidth: 1,
-        borderRadius: 5
-      }]
-    },
-    options: {
-      responsive: true,
-      plugins: { legend: { display: false } },
-      scales: {
-        y: { beginAtZero: true }
-      }
-    }
-  });
+  animateValue(document.getElementById('dailyNet'), 0, dailyNet, 1000);
+  animateValue(document.getElementById('weeklyNet'), 0, weeklyNet, 1000);
+  animateValue(document.getElementById('monthlyNet'), 0, monthlyNet, 1000);
+  animateValue(document.getElementById('annualNet'), 0, annualNet, 1000);
 }
 </script>
 
 </body>
 </html>
+
